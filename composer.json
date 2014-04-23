@@ -1,9 +1,9 @@
 {
-    "name": "hobnob/xml-stream-reader",
+    "name": "nvvetal/xml-stream-reader",
     "type": "library",
     "description": "PHP SAX XML Stream Reader",
     "keywords": ["XML","Stream"],
-    "homepage": "https://github.com/hobnob/xmlStreamReader",
+    "homepage": "https://github.com/nvvetal/xmlStreamReader",
     "license": "MIT",
     "authors": [
         {
@@ -19,7 +19,7 @@
     },
     "autoload": {
         "psr-0": {
-            "Hobnob\\XmlStreamReader": "/classes/"
+            "nvvetal\\XmlStreamReader": "/classes/"
         }
     }
 }
