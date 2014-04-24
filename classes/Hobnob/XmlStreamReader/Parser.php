@@ -10,7 +10,7 @@
  */
 namespace Hobnob\XmlStreamReader;
 
-use DomDocument;
+use SimpleXMLElement;
 use Exception;
 
 class Parser
@@ -396,21 +396,12 @@ class Parser
         //from invalid namespaces
 
         try{
-          $dom = new DOMDocument();
-          $res = $dom->loadXML($pathData);
-          if($res === false) {
-            unset($dom);
-            throw new \Exception('Wrong data!');
-          }
-/*
-        $data = new SimpleXMLElement(
-            preg_replace('/^(<[^\s>]+)/', '$1'.$namespaceStr, $pathData),
-            LIBXML_COMPACT | LIBXML_NOERROR | LIBXML_NOWARNING
-        );
+          $data = new SimpleXMLElement(
+              preg_replace('/^(<[^\s>]+)/', '$1'.$namespaceStr, $pathData),
+              LIBXML_COMPACT
+          );
 
-*/
         }catch(\Exception $e){
-          gc_collect_cycles();
           $this->errors[] = array(
             'message' => $e->getMessage(),
             'data' => $pathData,
@@ -422,15 +413,12 @@ class Parser
         //Loop through each callback. If one of them stops the parsing
         //then cease operation immediately
         foreach ($callbacks as $callback) {
-            call_user_func_array($callback, array($this, $dom));
+            call_user_func_array($callback, array($this, $data));
 
             if (!$this->parse) {
-                unset($dom);
                 return false;
             }
         }
-        gc_collect_cycles();
-        unset($dom);
         return true;
     }
 
