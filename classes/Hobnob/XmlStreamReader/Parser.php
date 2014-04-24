@@ -261,6 +261,12 @@ class Parser
 
             $val   = htmlentities($val, $options, "UTF-8");
             $val = str_replace('&deg;', '&#176;', $val);
+            $val = str_replace('&ndash;', '&#150;', $val);
+            $val = str_replace('&laquo;', '&#171;', $val);
+            $val = str_replace('&raquo;', '&#181;', $val);
+            $val = str_replace('&hellip;', '&#8230;', $val);
+            $val = str_replace('&rsquo;', '&#8217;', $val);
+
             $data .= ' '.strtolower($key).'="'.$val.'"';
 
             if (stripos($key, 'xmlns:') !== false) {
