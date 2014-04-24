@@ -42,6 +42,15 @@ class Parser
 
     private $errors = array();
 
+    private $storage = '';
+
+    private $storageMaxSize;
+    private $storageFilePrefix;
+    private $storageFilePath = '';
+    private $storageFileIteration = 0;
+    private $storageMinCut = 2;
+
+
     /**
      * Parses the XML provided using streaming and callbacks
      *
@@ -54,8 +63,6 @@ class Parser
      */
     public function parse($data, $chunkSize = 1024)
     {
-        gc_enable();
-        $this->errors = array();
         //Ensure that the $data var is of the right type
         if (!is_string($data) && (!is_resource($data) || get_resource_type($data) !== 'stream')) {
             throw new Exception('Data must be a string or a stream resource');
@@ -104,6 +111,59 @@ class Parser
         xml_parser_free($parser);
 
         return $this;
+    }
+
+    public function parseStorage($data, $filePath, $filePrefix, $chunkSize = 1024, $maxSize = 1000000, $minCut = 2){
+        //Ensure that the $data var is of the right type
+        if (!is_string($data) && (!is_resource($data) || get_resource_type($data) !== 'stream')) {
+            throw new Exception('Data must be a string or a stream resource');
+        }
+
+        //Ensure $chunkSize is the right type
+        if (!is_int($chunkSize)) {
+            throw new Exception('Chunk size must be an integer');
+        }
+
+        //Initialise the object
+        $this->init();
+        $this->storageMaxSize = $maxSize;
+        $this->storageFilePrefix = $filePrefix;
+        $this->storageFilePath = $filePath;
+        $this->storageMinCut = $minCut;
+
+        //Create the parser and set the parsing flag
+        $this->parse = TRUE;
+        $parser      = xml_parser_create();
+
+        //Set the parser up, ready to stream through the XML
+        xml_set_object($parser, $this);
+
+        //Set up the protected methods _start and _end to deal with the start
+        //and end tags respectively
+        xml_set_element_handler($parser, 'startStorage', 'endStorage');
+
+        //For general purpose data, use the _addData method
+        xml_set_default_handler($parser, 'addDataStorage');
+
+        //If the data is a resource then loop through it, otherwise just parse
+        //the string
+        if (is_resource($data)) {
+            //Not all resources support fseek. For those that don't, suppress
+            // /the error
+            @fseek($data, 0);
+
+            while ($this->parse && $chunk = fread($data, $chunkSize)) {
+                $this->parseString($parser, $chunk, feof($data));
+            }
+        } else {
+            $this->parseString($parser, $data, TRUE);
+        }
+
+        //Free up the parser
+        xml_parser_free($parser);
+
+        return $this;
+
     }
 
     /**
@@ -196,10 +256,14 @@ class Parser
      */
     private function init()
     {
+        gc_enable();
         $this->namespaces  = array();
         $this->currentPath = '/';
         $this->pathData    = array();
         $this->parse       = FALSE;
+        $this->storage     = '';
+        $this->errors = array();
+        $this->storageFileIteration = 0;
     }
 
     /**
@@ -266,6 +330,7 @@ class Parser
             $val = str_replace('&raquo;', '&#181;', $val);
             $val = str_replace('&hellip;', '&#8230;', $val);
             $val = str_replace('&rsquo;', '&#8217;', $val);
+            $val = str_replace('&micro;', '&#181;', $val);
 
             $data .= ' '.strtolower($key).'="'.$val.'"';
 
@@ -282,6 +347,47 @@ class Parser
 
         return $parser;
     }
+
+    protected function startStorage($parser, $tag, $attributes)
+    {
+        //Update the current path
+        $this->currentPath .= $tag.'/';
+
+        //Generate the tag, with attributes. Attribute names are also lower
+        //cased, for consistency
+        $data = '<'.$tag;
+        foreach ($attributes as $key => $val) {
+            $options = ENT_QUOTES;
+            if (defined('ENT_XML1')) {
+                $options |= ENT_XML1;
+            }
+
+            $val   = htmlentities($val, $options, "UTF-8");
+            $val = str_replace('&deg;', '&#176;', $val);
+            $val = str_replace('&ndash;', '&#150;', $val);
+            $val = str_replace('&laquo;', '&#171;', $val);
+            $val = str_replace('&raquo;', '&#181;', $val);
+            $val = str_replace('&hellip;', '&#8230;', $val);
+            $val = str_replace('&rsquo;', '&#8217;', $val);
+            $val = str_replace('&micro;', '&#181;', $val);
+
+            $data .= ' '.strtolower($key).'="'.$val.'"';
+
+            if (stripos($key, 'xmlns:') !== false) {
+                $key = strtolower($key);
+                $key = str_replace('xmlns:', '', $key);
+                $this->namespaces[strtolower($key)] = $val;
+            }
+        }
+        $data .= '>';
+
+        //Add the data to the path data required
+        $this->addDataStorage($parser, $data);
+
+        return $parser;
+    }
+
+
 
     /**
      * Adds CDATA to any paths that require it
@@ -320,6 +426,14 @@ class Parser
         return $parser;
     }
 
+    protected function addDataStorage($parser, $data)
+    {
+        $this->storage .= $data;
+
+        return $parser;
+    }
+
+
     /**
      * Parses the end of a tag
      *
@@ -330,9 +444,6 @@ class Parser
      */
     protected function end($parser, $tag)
     {
-        //Make the tag lower case, for consistency
-        $tag = strtolower($tag);
-
         //Add the data to the paths that require it
         $data = '</'.$tag.'>';
         $this->addData($parser, $data);
@@ -361,6 +472,72 @@ class Parser
 
         return $parser;
     }
+
+    protected function endStorage($parser, $tag)
+    {
+        //Make the tag lower case, for consistency
+        //$tag = mb_strtolower($tag, 'UTF-8');
+
+        //Add the data to the paths that require it
+        $data = '</'.$tag.'>';
+        $this->addDataStorage($parser, $data);
+
+        //Unset the path data for this path, as it's no longer needed
+        unset($this->pathData[$this->currentPath]);
+
+        //Update the path with the new path (effectively moving up a directory)
+        $this->currentPath = substr(
+            $this->currentPath,
+            0,
+            strlen($this->currentPath) - (strlen($tag) + 1)
+        );
+
+        $tags = explode('/', $this->currentPath);
+        if(mb_strlen($this->storage) > $this->storageMaxSize && count($tags) <= $this->storageMinCut ){
+          $this->saveStorageData($tags);
+        }elseif(count($tags) < $this->storageMinCut - 1){
+          $this->saveStorageData($tags);
+        }
+        return $parser;
+    }
+
+    private function saveStorageData($tags)
+    {
+          $this->storage .= "\n";
+          $tagNamePlus = '';
+          foreach(array_reverse($tags) as $tagName)
+          {
+            if(empty($tagName)) continue;
+            $tagNamePlus .= '/'.$tagName;
+            $tagNameDiff = mb_strlen($this->currentPath) - mb_strlen($tagNamePlus);
+            if($tagNameDiff < 0 ) break;
+            $prevTag = mb_substr(
+              $this->currentPath,
+              0,
+              $tagNameDiff
+            );
+            $this->storage .= "</".$tagName.">\n";
+
+          }
+          file_put_contents($this->storageFilePath.'/'.$this->storageFilePrefix.'_'.$this->storageFileIteration.'.xml', $this->storage);
+          $this->storageFileIteration++;
+          $this->storage = '';
+          $tagNamePlus = '';
+          foreach($tags as $tagName)
+          {
+            if(empty($tagName)) continue;
+            $tagNamePlus .= '/'.$tagName;
+            $tagNameDiff = mb_strlen($this->currentPath) - mb_strlen($tagNamePlus);
+            if($tagNameDiff < 0 ) break;
+            $prevTag = mb_substr(
+              $this->currentPath,
+              0,
+              $tagNameDiff
+            );
+            $this->storage .= "<".$tagName.">\n";
+          }
+    }
+
 
     /**
      * Generates a SimpleXMLElement and passes it to each of the callbacks
