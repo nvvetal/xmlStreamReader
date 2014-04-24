@@ -10,7 +10,7 @@
  */
 namespace Hobnob\XmlStreamReader;
 
-use SimpleXMLElement;
+use DomDocument;
 use Exception;
 
 class Parser
@@ -40,6 +40,8 @@ class Parser
      */
     private $namespaces = array();
 
+    private $errors = array();
+
     /**
      * Parses the XML provided using streaming and callbacks
      *
@@ -52,6 +54,8 @@ class Parser
      */
     public function parse($data, $chunkSize = 1024)
     {
+        gc_enable();
+        $this->errors = array();
         //Ensure that the $data var is of the right type
         if (!is_string($data) && (!is_resource($data) || get_resource_type($data) !== 'stream')) {
             throw new Exception('Data must be a string or a stream resource');
@@ -256,6 +260,7 @@ class Parser
             }
 
             $val   = htmlentities($val, $options, "UTF-8");
+            $val = str_replace('&deg;', '&#176;', $val);
             $data .= ' '.strtolower($key).'="'.$val.'"';
 
             if (stripos($key, 'xmlns:') !== false) {
@@ -383,21 +388,47 @@ class Parser
         //Build the SimpleXMLElement object. As this is a partial XML
         //document suppress any warnings or errors that might arise
         //from invalid namespaces
+
+        try{
+          $dom = new DOMDocument();
+          $res = $dom->loadXML($pathData);
+          if($res === false) {
+            unset($dom);
+            throw new \Exception('Wrong data!');
+          }
+/*
         $data = new SimpleXMLElement(
             preg_replace('/^(<[^\s>]+)/', '$1'.$namespaceStr, $pathData),
             LIBXML_COMPACT | LIBXML_NOERROR | LIBXML_NOWARNING
         );
 
+*/
+        }catch(\Exception $e){
+          gc_collect_cycles();
+          $this->errors[] = array(
+            'message' => $e->getMessage(),
+            'data' => $pathData,
+          );
+          return false;
+        }
+
+
         //Loop through each callback. If one of them stops the parsing
         //then cease operation immediately
         foreach ($callbacks as $callback) {
-            call_user_func_array($callback, array($this, $data));
+            call_user_func_array($callback, array($this, $dom));
 
             if (!$this->parse) {
+                unset($dom);
                 return false;
             }
         }
-
+        gc_collect_cycles();
+        unset($dom);
         return true;
+    }
+
+    public function getErrors(){
+        return $this->errors;
     }
 }
