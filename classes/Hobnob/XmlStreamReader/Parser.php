@@ -49,6 +49,7 @@ class Parser
     private $storageFilePath = '';
     private $storageFileIteration = 0;
     private $storageMinCut = 2;
+    private $storageMaxCut = 5;
 
 
     /**
@@ -113,7 +114,7 @@ class Parser
         return $this;
     }
 
-    public function parseStorage($data, $filePath, $filePrefix, $chunkSize = 1024, $maxSize = 1000000, $minCut = 2){
+    public function parseStorage($data, $filePath, $filePrefix, $chunkSize = 1024, $maxSize = 1000000, $minCut = 2, $maxCut = 5){
         //Ensure that the $data var is of the right type
         if (!is_string($data) && (!is_resource($data) || get_resource_type($data) !== 'stream')) {
             throw new Exception('Data must be a string or a stream resource');
@@ -130,6 +131,7 @@ class Parser
         $this->storageFilePrefix = $filePrefix;
         $this->storageFilePath = $filePath;
         $this->storageMinCut = $minCut;
+        $this->storageMaxCut = $maxCut;
 
         //Create the parser and set the parsing flag
         $this->parse = TRUE;
@@ -493,9 +495,9 @@ class Parser
         );
 
         $tags = explode('/', $this->currentPath);
-        if(mb_strlen($this->storage) > $this->storageMaxSize && count($tags) <= $this->storageMinCut ){
+        if(mb_strlen($this->storage) > $this->storageMaxSize && count($tags) < $this->storageMaxCut ){
           $this->saveStorageData($tags);
-        }elseif(count($tags) < $this->storageMinCut - 1){
+        }elseif(count($tags) == $this->storageMinCut){
           $this->saveStorageData($tags);
         }
         return $parser;
