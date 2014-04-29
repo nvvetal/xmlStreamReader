@@ -333,6 +333,7 @@ class Parser
             $val = str_replace('&hellip;', '&#8230;', $val);
             $val = str_replace('&rsquo;', '&#8217;', $val);
             $val = str_replace('&micro;', '&#181;', $val);
+            $val = str_replace('&nbsp;', '&#160;', $val);
 
             $data .= ' '.strtolower($key).'="'.$val.'"';
 
@@ -372,6 +373,7 @@ class Parser
             $val = str_replace('&hellip;', '&#8230;', $val);
             $val = str_replace('&rsquo;', '&#8217;', $val);
             $val = str_replace('&micro;', '&#181;', $val);
+            $val = str_replace('&nbsp;', '&#160;', $val);
 
             $data .= ' '.strtolower($key).'="'.$val.'"';
 
